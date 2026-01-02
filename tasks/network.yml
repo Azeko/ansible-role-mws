@@ -1,0 +1,38 @@
+---
+# Tasks for creating VPC networks
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Check if network {{ item.name }} exists
+  command: mws vpc network get {{ item.name }}
+  register: network_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ networks }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: network_index
+
+- name: Create network {{ item.name }}
+  command: >
+    mws vpc network create {{ item.name }} --body
+    'metadata:
+      description: "{{ item.description | default('') }}"
+    spec:
+      internetAccess: {{ item.internet_access | default(mws_default_network_internet_access) | lower }}
+      mtu: {{ item.mtu | default(mws_default_network_mtu) }}'
+  register: network_create
+  when: network_check.results[network_index].rc != 0
+  changed_when: network_create.rc == 0
+  failed_when: network_create.rc != 0
+  loop: "{{ networks }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: network_index
+

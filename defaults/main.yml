@@ -1,0 +1,44 @@
+---
+# MWS Cloud Platform Ansible Role - Default Variables
+
+# Required: MWS project name
+mws_project: null
+
+# Default zone for resources
+mws_zone: "ru-central1-a"
+
+# Default VM type
+mws_default_vm_type: "vmTypes/gen-2-4"
+
+# Default disk type
+mws_default_disk_type: "diskTypes/nbs-pl2"
+
+# Default disk IOPS
+mws_default_disk_iops: 1000
+
+# Default boot disk size
+mws_default_boot_disk_size: "20GB"
+
+# Default boot disk source image
+mws_default_boot_disk_image: "compute/projects/mws-ubuntu/images/mws-ubuntu-2404-lts-v20250529"
+
+# Default network MTU
+mws_default_network_mtu: 1500
+
+# Default network internet access
+mws_default_network_internet_access: true
+
+# Default network name
+mws_default_network_name: null
+
+mws_default_cloud_init: "cloud-init/basic.yml"
+
+# Resource lists (empty by default, should be defined in playbook)
+networks: []
+subnets: []
+firewall_rules: []
+external_static_addresses: []
+private_static_addresses: []
+disks: []
+vms: []
+

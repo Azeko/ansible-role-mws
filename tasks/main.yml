@@ -1,0 +1,31 @@
+---
+# Main entry point for MWS role
+# This file includes other task files based on what resources need to be created
+
+- name: Include network creation tasks
+  include_tasks: network.yml
+  when: networks | length > 0
+
+- name: Include subnet creation tasks
+  include_tasks: subnet.yml
+  when: subnets | length > 0
+
+- name: Include external IP address creation tasks
+  include_tasks: external_ip.yml
+  when: external_static_addresses | length > 0
+
+- name: Include private IP address creation tasks
+  include_tasks: private_ip.yml
+  when: private_static_addresses | length > 0
+
+- name: Include firewall rule creation tasks
+  include_tasks: firewall.yml
+  when: firewall_rules | length > 0
+
+- name: Include disk creation tasks
+  include_tasks: disk.yml
+  when: disks | length > 0
+
+- name: Include VM creation tasks
+  include_tasks: vm.yml
+  when: vms | length > 0

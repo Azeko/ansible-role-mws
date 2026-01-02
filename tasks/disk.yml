@@ -1,0 +1,38 @@
+---
+# Tasks for creating compute disks
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Check if disk {{ item.name }} exists
+  command: mws compute disk get {{ item.name }}
+  register: disk_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ disks }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: disk_index
+
+- name: Create disk {{ item.name }}
+  command: >
+    mws compute disk create {{ item.name }} --body
+    'spec:
+      diskType: {{ item.disk_type | default(mws_default_disk_type) }}
+      iops: {{ item.iops | default(mws_default_disk_iops) }}
+      size: {{ item.size }}
+      zone: {{ item.zone | default(mws_zone) }}'
+  register: disk_create
+  when: disk_check.results[disk_index].rc != 0
+  changed_when: disk_create.rc == 0
+  failed_when: disk_create.rc != 0
+  loop: "{{ disks }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: disk_index
+

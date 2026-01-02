@@ -1,0 +1,34 @@
+---
+# Tasks for creating static external IP addresses
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Check if external address {{ item.name }} exists
+  command: mws vpc external-address get {{ item.name }}
+  register: external_ip_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ external_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: external_ip_index
+
+- name: Create external address {{ item.name }}
+  command: >
+    mws vpc external-address create {{ item.name }} --body
+    'spec: {}'
+  register: external_ip_create
+  when: external_ip_check.results[external_ip_index].rc != 0
+  changed_when: external_ip_create.rc == 0
+  failed_when: external_ip_create.rc != 0
+  loop: "{{ external_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: external_ip_index
+

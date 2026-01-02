@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  author: Your Name
+  description: Ansible role for provisioning VMs and configuring networking in MWS cloud platform
+  license: MIT
+  min_ansible_version: "2.9"
+  platforms:
+    - name: Generic
+      versions:
+        - all
+  galaxy_tags:
+    - cloud
+    - mws
+    - vm
+    - networking
+    - infrastructure
+
+dependencies: []
+

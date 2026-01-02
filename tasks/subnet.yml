@@ -1,0 +1,44 @@
+---
+# Tasks for creating VPC subnets
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Validate network {{ item.network_name | default(mws_default_network_name) }} exists for subnet {{ item.name }}
+  command: mws vpc network get {{ item.network_name | default(mws_default_network_name) }}
+  register: subnet_network_check
+  failed_when: subnet_network_check.rc != 0
+  changed_when: false
+  loop: "{{ subnets }}"
+  loop_control:
+    label: "{{ item.network_name | default(mws_default_network_name) }} (for subnet {{ item.name }})"
+
+- name: Check if subnet {{ item.name }} exists in network {{ item.network_name | default(mws_default_network_name) }}
+  command: mws vpc subnet get --network {{ item.network_name | default(mws_default_network_name) }} {{ item.name }}
+  register: subnet_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ subnets }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: subnet_index
+
+- name: Create subnet {{ item.name }} in network {{ item.network_name | default(mws_default_network_name) }}
+  command: >
+    mws vpc subnet create {{ item.name }} --network {{ item.network_name | default(mws_default_network_name) }} --body
+    'spec:
+      cidr: {{ item.cidr }}'
+  register: subnet_create
+  when: subnet_check.results[subnet_index].rc != 0
+  changed_when: subnet_create.rc == 0
+  failed_when: subnet_create.rc != 0
+  loop: "{{ subnets }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: subnet_index
+

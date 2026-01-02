@@ -1,0 +1,55 @@
+---
+# Tasks for creating static private IP addresses
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Check if private address {{ item.name }} exists
+  command: mws vpc address --network {{ item.network_name | default(mws_default_network_name) }} get {{ item.name }}
+  register: private_ip_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ private_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: private_ip_index
+
+- name: Create private address {{ item.name }}
+  command: >
+    mws vpc address create {{ item.name }} --network {{ item.network_name | default(mws_default_network_name) }} --body
+    'spec: {
+      subnet: {{ item.subnet }}
+    }'
+  register: private_ip_create
+  when: private_ip_check.results[private_ip_index].rc != 0
+  changed_when: private_ip_create.rc == 0
+  failed_when: private_ip_create.rc != 0
+  loop: "{{ private_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: private_ip_index
+
+- name: Fetch private address details to get IP addresses
+  command: mws vpc address --network {{ item.network_name | default(mws_default_network_name) }} get {{ item.name }}
+  register: private_ip_details
+  changed_when: false
+  loop: "{{ private_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: private_ip_index
+
+- name: Extract IP addresses from private address details
+  set_fact:
+    private_address_ips: "{{ private_address_ips | default({}) | combine({item.item.name: (item.stdout | from_yaml).status.ipAddress}) }}"
+  loop: "{{ private_ip_details.results }}"
+  when: 
+    - item.rc == 0
+    - item.stdout is defined
+    - (item.stdout | from_yaml).status.ipAddress is defined
+  loop_control:
+    label: "{{ item.item.name }}"

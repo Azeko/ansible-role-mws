@@ -1,0 +1,143 @@
+---
+# Tasks for creating virtual machines
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Validate network interfaces for VM {{ item.name }}
+  assert:
+    that:
+      - item.network_interfaces is defined
+      - item.network_interfaces | length > 0
+    fail_msg: "VM {{ item.name }} must have at least one network_interface defined"
+    quiet: true
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Validate network exists for VM {{ item.0.name }} interface {{ item.1.name }}
+  command: mws vpc network get {{ item.1.network_name | default(mws_default_network_name) }}
+  register: vm_network_check
+  failed_when: vm_network_check.rc != 0
+  changed_when: false
+  loop: "{{ vms | subelements('network_interfaces', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} - {{ item.1.name }}"
+
+- name: Validate subnet exists for VM {{ item.0.name }} interface {{ item.1.name }}
+  command: mws vpc subnet get --network {{ item.1.network_name | default(mws_default_network_name) }} {{ item.1.subnet }}
+  register: vm_subnet_check
+  failed_when: vm_subnet_check.rc != 0
+  changed_when: false
+  loop: "{{ vms | subelements('network_interfaces', skip_missing=True) }}"
+  when: item.1.subnet is defined and item.1.private_static_address_name is not defined
+  loop_control:
+    label: "{{ item.0.name }} - {{ item.1.name }} - {{ item.1.subnet | default('N/A') }}"
+
+- name: Validate private static address exists for VM {{ item.0.name }} interface {{ item.1.name }}
+  command: mws vpc address --network {{ item.1.network_name | default(mws_default_network_name) }} get {{ item.1.private_static_address_name }}
+  register: vm_private_address_check
+  failed_when: vm_private_address_check.rc != 0
+  changed_when: false
+  loop: "{{ vms | subelements('network_interfaces', skip_missing=True) }}"
+  when: item.1.private_static_address_name is defined
+  loop_control:
+    label: "{{ item.0.name }} - {{ item.1.name }} - {{ item.1.private_static_address_name | default('N/A') }}"
+
+- name: Validate external static address exists for VM {{ item.0.name }} interface {{ item.1.name }}
+  command: mws vpc external-address get {{ item.1.external_static_address_name }}
+  register: vm_external_address_check
+  failed_when: vm_external_address_check.rc != 0
+  changed_when: false
+  loop: "{{ vms | subelements('network_interfaces', skip_missing=True) }}"
+  when: item.1.external_static_address_name is defined
+  loop_control:
+    label: "{{ item.0.name }} - {{ item.1.name }} - {{ item.1.external_static_address_name | default('N/A') }}"
+
+- name: Check if VM {{ item.name }} exists
+  command: mws compute vm get {{ item.name }}
+  register: vm_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Validate cloud-init template reference for VM {{ item.name }}
+  assert:
+    that:
+      - (item.cloud_init | default(mws_default_cloud_init)) is string
+      - (item.cloud_init | default(mws_default_cloud_init)).startswith('cloud-init/')
+    fail_msg: "cloud_init must be a template file reference starting with 'cloud-init/' (e.g., 'cloud-init/basic.yml')"
+    quiet: true
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Load cloud-init content from template for VM {{ item.name }}
+  set_fact:
+    "cloud_init_content_{{ item.name | replace('-', '_') | replace('.', '_') }}": "{{ lookup('template', item.cloud_init | default(mws_default_cloud_init)) }}"
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Generate VM spec for {{ item.name }}
+  template:
+    src: vm-spec.yml.j2
+    dest: "/tmp/vm_spec_{{ item.name | replace('-', '_') | replace('.', '_') }}.yml"
+  register: vm_spec_generated
+  changed_when: false
+  when: vm_check.results[vm_index].rc != 0
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Dump VM spec for {{ item.name }}
+  slurp:
+    src: "/tmp/vm_spec_{{ item.name | replace('-', '_') | replace('.', '_') }}.yml"
+  register: vm_spec_content
+  when: vm_check.results[vm_index].rc != 0
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Display VM spec for {{ item.name }}
+  debug:
+    msg: "{{ vm_spec_content.results[vm_index].content | b64decode }}"
+  when: vm_check.results[vm_index].rc != 0
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Create VM {{ item.name }}
+  shell: |
+    mws compute vm create {{ item.name }} --body "$(cat /tmp/vm_spec_{{ item.name | replace('-', '_') | replace('.', '_') }}.yml)"
+  register: vm_create
+  when: vm_check.results[vm_index].rc != 0
+  changed_when: vm_create.rc == 0
+  failed_when: vm_create.rc != 0
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+
+- name: Clean up temporary VM spec files for {{ item.name }}
+  file:
+    path: "/tmp/vm_spec_{{ item.name | replace('-', '_') | replace('.', '_') }}.yml"
+    state: absent
+  when: vm_check.results[vm_index].rc != 0
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index

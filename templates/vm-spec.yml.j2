@@ -1,0 +1,64 @@
+spec:
+  vmType: {{ item.vm_type | default(mws_default_vm_type) }}
+  zone: {{ item.zone | default(mws_zone) }}
+  hardware:
+    power: "{{ item.power | default('ON') | upper }}"
+{% if item.service_account is defined %}
+  serviceAccount: {{ item.service_account }}
+{% endif %}
+  network:
+    networkInterfaces:
+{% for interface in item.network_interfaces %}
+      - name: {{ interface.name }}
+        primary: {{ interface.primary | lower }}
+        addresses:
+          - address:
+{% if interface.private_static_address_name is defined %}
+              ref: projects/{{ mws_project }}/networks/{{ interface.network_name | default(mws_default_network_name) }}/addresses/{{ interface.private_static_address_name }}
+{% elif interface.subnet is defined %}
+              spec:
+                subnet: networks/{{ interface.network_name | default(mws_default_network_name) }}/subnets/{{ interface.subnet }}
+{% endif %}
+{% if interface.external_static_address_name is defined %}
+            oneToOneNat:
+              external:
+                address:
+                  ref: projects/{{ mws_project }}/externalAddresses/{{ interface.external_static_address_name }}
+{% endif %}
+{% endfor %}
+  os:
+    metadata:
+      attributes:
+        user-data: |
+{% set cloud_init_var = 'cloud_init_content_' + item.name | replace('-', '_') | replace('.', '_') %}
+{{ vars[cloud_init_var] | indent(10, true) }}
+    standardDnsRecords: {{ item.standard_dns_records | default(true) | lower }}
+  storage:
+    disks:
+      - name: boot
+        boot: true
+        disk:
+          spec:
+            diskType: {{ item.boot_disk.disk_type | default(mws_default_disk_type) }}
+            iops: {{ item.boot_disk.iops | default(mws_default_disk_iops) }}
+            size: {{ item.boot_disk.size | default(mws_default_boot_disk_size) }}
+            source:
+              image: {{ item.boot_disk.source_image | default(mws_default_boot_disk_image) }}
+{% if item.additional_disks is defined %}
+{% for disk in item.additional_disks %}
+      - name: {{ disk.name }}
+        boot: false
+  {% if disk.managed is defined and disk.managed %}
+        managed: true
+        disk:
+          spec:
+            diskType: {{ disk.disk_type | default(mws_default_disk_type) }}
+            iops: {{ disk.iops | default(mws_default_disk_iops) }}
+            size: {{ disk.size }}
+  {% else %}
+        disk:
+          ref: {{ disk.ref }}
+  {% endif %}
+{% endfor %}
+{% endif %}
+

@@ -1,0 +1,92 @@
+---
+# Tasks for creating firewall rules
+
+- name: Validate mws_project is set
+  assert:
+    that:
+      - mws_project is defined
+      - mws_project | length > 0
+    fail_msg: "mws_project must be defined"
+    quiet: true
+
+- name: Initialize resolved CIDRs dictionary
+  set_fact:
+    firewall_rule_cidrs: {}
+  when: private_address_ips is defined
+
+- name: Process each CIDR to resolve IP address references
+  set_fact:
+    firewall_rule_cidrs: "{{ firewall_rule_cidrs | combine({item.0.name: firewall_rule_cidrs[item.0.name] | default([]) + [(item.1.startswith('private_address:') and (private_address_ips[item.1.split(':')[1].split('/')[0]] + ('/' + item.1.split('/')[1] if '/' in item.1.split(':')[1] else '/32'))) | default(item.1)]}) }}"
+  loop: "{{ firewall_rules | subelements('destination.cidrs', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }} - {{ item.1 }}"
+  when: 
+    - private_address_ips is defined
+    - item.0.destination is defined
+    - item.0.destination.cidrs is defined
+  failed_when: false
+
+- name: Resolve IP address references in firewall rule destination CIDRs
+  set_fact:
+    resolved_firewall_rules: "{{ resolved_firewall_rules | default([]) + [resolved_rule] }}"
+  vars:
+    resolved_rule: "{{ item | combine({'destination': item.destination | combine({'cidrs': firewall_rule_cidrs[item.name] | default(item.destination.cidrs | default([]))})}) }}"
+  loop: "{{ firewall_rules }}"
+  when: 
+    - private_address_ips is defined
+    - firewall_rule_cidrs is defined
+    - item.destination is defined
+  loop_control:
+    label: "{{ item.name }}"
+  failed_when: false
+
+- name: Use resolved firewall rules if available, otherwise use original
+  set_fact:
+    firewall_rules: "{{ resolved_firewall_rules | default(firewall_rules) }}"
+  when: resolved_firewall_rules is defined or private_address_ips is not defined
+
+- name: Validate network {{ item.network_name | default(mws_default_network_name) }} exists for firewall rule {{ item.name }}
+  command: mws vpc network get {{ item.network_name | default(mws_default_network_name) }}
+  register: firewall_network_check
+  failed_when: firewall_network_check.rc != 0
+  changed_when: false
+  loop: "{{ firewall_rules }}"
+  loop_control:
+    label: "{{ item.network_name | default(mws_default_network_name) }} (for firewall rule {{ item.name }})"
+
+- name: Check if firewall rule {{ item.name }} exists in network {{ item.network_name | default(mws_default_network_name) }}
+  command: mws vpc firewall-rule get --network {{ item.network_name | default(mws_default_network_name) }} {{ item.name }}
+  register: firewall_check
+  failed_when: false
+  changed_when: false
+  loop: "{{ firewall_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: firewall_index
+
+- name: Create firewall rule {{ item.name }} in network {{ item.network_name | default(mws_default_network_name) }}
+  command: >
+    mws vpc firewall-rule create {{ item.name }} --network {{ item.network_name | default(mws_default_network_name) }} --body
+    'metadata:
+      description: "{{ item.description | default('') }}"
+      displayName: "{{ item.display_name | default(item.name) }}"
+    spec:
+      action: {{ item.action | upper }}
+      active: {{ item.active | default(true) | lower }}
+      destination:
+        spec:
+          cidrs: {{ item.destination.cidrs | default(['0.0.0.0/0']) }}
+      direction: {{ item.direction | upper }}
+      protoPorts: {{ item.proto_ports | default([]) }}
+      priority: {{ item.priority | default(1000) }}
+      source:
+        spec:
+          cidrs: {{ item.source.cidrs | default(['0.0.0.0/0']) }}'
+  register: firewall_create
+  when: firewall_check.results[firewall_index].rc != 0
+  changed_when: firewall_create.rc == 0
+  failed_when: firewall_create.rc != 0
+  loop: "{{ firewall_rules }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: firewall_index

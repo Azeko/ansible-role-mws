@@ -1,0 +1,132 @@
+---
+# Example Ansible Playbook for MWS Cloud Platform
+# This playbook demonstrates how to use the ansible-role-mws role
+# to provision VMs and configure networking
+
+- name: Provision MWS Cloud Infrastructure
+  hosts: localhost
+  gather_facts: false
+  
+  vars:
+    # Required: MWS project name
+    mws_project: "my-project"
+    
+    # Optional: Override default zone
+    mws_zone: "ru-central1-a"
+
+    mws_compute_vm_ssh_username: "admin"
+    mws_compute_vm_ssh_public_key: "ssh-ed25519 XXXXXXX name@domain.com"
+
+    # Default network name (used when network is not explicitly specified)
+    mws_default_network_name: "example-network"
+    
+    # Define networks to create
+    networks:
+      - name: "{{ mws_default_network_name }}"
+        internet_access: true
+        mtu: 1500
+    
+    # Define subnets to create
+    # Note: The network must exist before creating subnets
+    # When using mws_default_network_name, network field can be omitted
+    subnets:
+      - name: "example-subnet"
+        cidr: "192.168.0.0/24"
+    
+    # Define external static IP addresses
+    #external_static_addresses:
+    #  - name: "example-external-ip"
+
+    # Define private static IP addresses (optional)
+    # private_static_addresses:
+    #   - name: "example-private-ip"
+    #     subnet: "example-subnet"
+    
+    # Define firewall rules
+    # Note: The network must exist before creating firewall rules
+    # When using mws_default_network_name, network field can be omitted
+    firewall_rules:
+      - name: "allow-ssh"
+        network_name: "{{ mws_default_network_name }}"
+        description: "Allow SSH access"
+        display_name: "Allow SSH"
+        action: "ALLOW"
+        direction: "INGRESS"
+        proto_ports:
+          - "TCP:22"
+        priority: 1000
+        source:
+          cidrs: ["0.0.0.0/0"]
+        destination:
+          cidrs: ["192.168.0.0/24"]
+      
+      - name: "deny-smtp"
+        network_name: "{{ mws_default_network_name }}"
+        description: "Deny SMTP traffic"
+        display_name: "Deny SMTP"
+        action: "DENY"
+        direction: "EGRESS"
+        proto_ports:
+          - "TCP:25"
+          - "TCP:587"
+        priority: 1000
+        source:
+          cidrs: ["0.0.0.0/0"]
+        destination:
+          cidrs: ["0.0.0.0/0"]
+    
+    # Создать новый независимый диск
+    disks:
+      - name: "example-data-disk"
+        size: "50GB"
+        zone: "{{ mws_zone }}"
+        disk_type: "diskTypes/nbs-pl2"
+        iops: 2000
+    
+    # Define virtual machines
+    # Note: Network and subnet must exist before creating VMs
+    # Cloud-init must be specified as a template file reference (e.g., "cloud-init/basic.yml")
+    vms:
+      - name: "example-vm"
+        zone: "{{ mws_zone }}"
+        vm_type: "vmTypes/gen-2-8"
+        network_interfaces:
+          - name: eth0
+            network_name: "{{ mws_default_network_name }}"
+            subnet: "example-subnet"
+            primary: true
+            # Optional: Use external static address
+            # external_static_address_name: "example-external-ip"
+            # Optional: Use private static address
+            # private_static_address_name: "example-private-ip"
+        
+        # Boot disk configuration
+        boot_disk:
+          disk_type: "diskTypes/nbs-pl2"
+          iops: 1000
+          size: "20GB"
+          source_image: "compute/projects/mws-ubuntu/images/mws-ubuntu-2404-lts-v20250529"
+        
+        # Cloud-init: Must be a template file reference (stored in templates/cloud-init/)
+        # Available templates: basic.yml, secure.yml, docker.yml
+        # Templates support Jinja2 variables (e.g., {{ ssh_public_key }})
+        cloud_init: "cloud-init/basic.yml"
+        
+        standard_dns_records: true
+        
+        # Optional: Additional disks
+        additional_disks:
+        #     # Подключить существующий независимый диск
+          - name: "example-data-disk"
+            managed: false
+            ref: "projects/{{ mws_project }}/disks/example-data-disk"
+        #    # Создать виртуальную машину с дополнительным зависимым диском
+        #   - name: "data-disk"
+        #     managed: true
+        #     disk_type: "diskTypes/nbs-pl2"
+        #     iops: 1000
+        #     size: "50GB"
+  
+  roles:
+    - ansible-role-mws
+
