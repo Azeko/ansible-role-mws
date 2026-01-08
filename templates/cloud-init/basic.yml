@@ -3,7 +3,7 @@ users:
   - name: "{{ mws_compute_vm_ssh_username }}"
     groups: sudo
     shell: /bin/bash
-    sudo: 'ALL=(ALL) PASSWD:ALL'
+    sudo: '{{ mws_compute_vm_sudo }}'
     ssh_authorized_keys:
       - {{ mws_compute_vm_ssh_public_key | default('') }}
 

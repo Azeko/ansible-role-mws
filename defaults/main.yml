@@ -33,6 +33,8 @@ mws_default_network_name: null
 
 mws_default_cloud_init: "cloud-init/basic.yml"
 
+mws_compute_vm_sudo: 'ALL=(ALL) PASSWD:ALL'
+
 # Resource lists (empty by default, should be defined in playbook)
 networks: []
 subnets: []
