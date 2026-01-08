@@ -50,3 +50,5 @@ private_static_addresses: []
 disks: []
 vms: []
 
+# Path to save dynamic variables YAML file (relative to playbook directory)
+mws_variables_file: "vars/mws_resources.yml"

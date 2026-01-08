@@ -29,3 +29,7 @@
 - name: Include VM creation tasks
   include_tasks: vm.yml
   when: vms | length > 0
+
+- name: Save dynamic variables to YAML file
+  include_tasks: save_variables.yml
+  when: vms | length > 0 or external_static_addresses | length > 0 or private_static_addresses | length > 0

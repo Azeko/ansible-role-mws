@@ -1,0 +1,34 @@
+external_ips:
+    stage-vpn-public-address: 2.59.80.177
+private_ips:
+    stage-vpn-private-address: 10.1.1.4
+vms:
+    stage-k8sm-01:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.5
+    stage-k8sm-02:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.7
+    stage-k8sm-03:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.6
+    stage-k8sw-01:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.8
+    stage-k8sw-02:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.9
+    stage-k8sw-03:
+        external_ips: []
+        internal_ips:
+        - 10.1.2.10
+    stage-vpn:
+        external_ips:
+        - 2.59.80.177
+        internal_ips:
+        - 10.1.1.4

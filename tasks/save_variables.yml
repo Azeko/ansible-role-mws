@@ -1,0 +1,67 @@
+---
+# Tasks for saving dynamic variables to YAML file
+# These variables are only available after resource creation
+
+- name: Initialize variables dictionary
+  set_fact:
+    mws_resources:
+      vms: {}
+      external_ips: {}
+      private_ips: {}
+
+- name: Fetch VM details to extract IP addresses
+  command: mws compute vm get {{ item.name }} --format yaml
+  register: vm_details
+  changed_when: false
+  failed_when: false
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+  when: vms | length > 0
+
+- name: Extract IP addresses from VM details
+  set_fact:
+    mws_resources: "{{ mws_resources | combine({'vms': mws_resources.vms | combine({item.name: {'internal_ips': vm_internal_ips, 'external_ips': vm_external_ips}})}) }}"
+  vars:
+    vm_data: "{{ vm_details.results[vm_index].stdout | from_yaml | default({}) }}"
+    vm_addresses: "{{ vm_data.status.network.networkInterfaces | default([]) | map(attribute='addresses', default=[]) | flatten | default([]) }}"
+    vm_internal_ips_from_ref: "{{ vm_addresses | selectattr('ref', 'defined') | selectattr('ipAddress', 'undefined') | map(attribute='ref', default='') | map('regex_replace', '^.*/addresses/([^/]+)$', '\\1') | list | map('extract', private_address_ips | default({})) | select('string') | list }}"
+    vm_internal_ips_from_direct: "{{ vm_addresses | selectattr('ipAddress', 'defined') | map(attribute='ipAddress', default='') | select('string') | list }}"
+    vm_internal_ips: "{{ (vm_internal_ips_from_ref + vm_internal_ips_from_direct) | unique | default([]) }}"
+    vm_external_ips: "{{ vm_addresses | selectattr('oneToOneNat', 'defined') | map(attribute='oneToOneNat', default={}) | map(attribute='external', default={}) | map(attribute='ipAddress', default='') | select('string') | list | unique | default([]) }}"
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_index
+  when: 
+    - vms | length > 0
+    - vm_details.results[vm_index].rc == 0
+    - vm_details.results[vm_index].stdout is defined
+    - vm_details.results[vm_index].stdout | length > 0
+
+- name: Collect external IP addresses
+  set_fact:
+    mws_resources: "{{ mws_resources | combine({'external_ips': mws_resources.external_ips | combine({item.name: vars['external_static_address_ip_' + item.name | replace('-', '_')] | default('')})}) }}"
+  loop: "{{ external_static_addresses }}"
+  when: 
+    - external_static_addresses | length > 0
+    - vars['external_static_address_ip_' + item.name | replace('-', '_')] is defined
+
+- name: Collect private IP addresses
+  set_fact:
+    mws_resources: "{{ mws_resources | combine({'private_ips': mws_resources.private_ips | combine(private_address_ips | default({}))}) }}"
+  when: private_address_ips is defined
+
+- name: Ensure directory exists for variables file
+  file:
+    path: "{{ (playbook_dir + '/' + (mws_variables_file | default('vars/mws_resources.yml'))) | dirname }}"
+    state: directory
+    mode: '0755'
+
+- name: Save dynamic variables to YAML file
+  copy:
+    content: "{{ mws_resources | to_nice_yaml }}"
+    dest: "{{ playbook_dir }}/{{ mws_variables_file | default('vars/mws_resources.yml') }}"
+    mode: '0644'
+  when: mws_resources is defined
