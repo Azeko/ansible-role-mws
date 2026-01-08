@@ -32,3 +32,38 @@
     label: "{{ item.name }}"
     index_var: external_ip_index
 
+- name: get info about external-address and wait for IP assignment
+  command: >
+    mws vpc external-address get {{ item.name }} --format yaml
+  register: mws_vpc_external_address_get_address
+  until: >
+    (mws_vpc_external_address_get_address.rc == 0) and
+    (mws_vpc_external_address_get_address.stdout | length > 0) and
+    (((mws_vpc_external_address_get_address.stdout | from_yaml | default({})).status | default({})).ipAddress | default('') | length > 0)
+  retries: "{{ external_ip_wait_retries | default(30) }}"
+  delay: "{{ external_ip_wait_delay | default(2) }}"
+  failed_when: false
+  loop: "{{ external_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: external_address_index
+
+- name: Fail if IP address was not assigned
+  assert:
+    that:
+      - mws_vpc_external_address_get_address.results[external_address_index].rc == 0
+      - mws_vpc_external_address_get_address.results[external_address_index].stdout | length > 0
+      - (((mws_vpc_external_address_get_address.results[external_address_index].stdout | from_yaml | default({})).status | default({})).ipAddress | default('') | length > 0)
+    fail_msg: "IP address was not assigned to external address {{ item.name }} after {{ external_ip_wait_retries | default(30) }} retries ({{ (external_ip_wait_retries | default(30)) * (external_ip_wait_delay | default(2)) }} seconds)"
+  loop: "{{ external_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: external_address_index
+
+- name: Register IP address for each external static address
+  set_fact:
+    "external_static_address_ip_{{ item.name | replace('-', '_') }}": "{{ (mws_vpc_external_address_get_address.results[external_address_index].stdout | from_yaml).status.ipAddress }}"
+  loop: "{{ external_static_addresses }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: external_address_index

@@ -35,6 +35,12 @@ mws_default_cloud_init: "cloud-init/basic.yml"
 
 mws_compute_vm_sudo: 'ALL=(ALL) PASSWD:ALL'
 
+# External IP address wait configuration
+# Number of retries when waiting for IP address assignment (default: 30 retries = 60 seconds with 2s delay)
+external_ip_wait_retries: 30
+# Delay in seconds between retries when waiting for IP address assignment (default: 2 seconds)
+external_ip_wait_delay: 2
+
 # Resource lists (empty by default, should be defined in playbook)
 networks: []
 subnets: []
