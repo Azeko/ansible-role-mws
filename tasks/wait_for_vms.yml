@@ -1,0 +1,30 @@
+---
+# Tasks for waiting for VMs to reach ready state
+
+- name: Wait for VM {{ item.name }} to be ready
+  command: >
+    mws compute vm get {{ item.name }} --format yaml
+  register: vm_ready_check
+  until: >
+    (vm_ready_check.rc == 0) and
+    (vm_ready_check.stdout | length > 0) and
+    (((vm_ready_check.stdout | from_yaml | default({})).status | default({})).ready | default({})).state | default('') == 'OK'
+  retries: "{{ vm_wait_retries | default(36) }}"
+  delay: "{{ vm_wait_delay | default(5) }}"
+  failed_when: false
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_wait_index
+
+- name: Fail if VM {{ item.name }} is not ready
+  assert:
+    that:
+      - vm_ready_check.results[vm_wait_index].rc == 0
+      - vm_ready_check.results[vm_wait_index].stdout | length > 0
+      - (((vm_ready_check.results[vm_wait_index].stdout | from_yaml | default({})).status | default({})).ready | default({})).state | default('') == 'OK'
+    fail_msg: "VM {{ item.name }} did not reach ready state (status.ready.state: OK) after {{ vm_wait_retries | default(36) }} retries ({{ (vm_wait_retries | default(36)) * (vm_wait_delay | default(5)) }} seconds)"
+  loop: "{{ vms }}"
+  loop_control:
+    label: "{{ item.name }}"
+    index_var: vm_wait_index

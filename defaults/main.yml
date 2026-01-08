@@ -41,6 +41,12 @@ external_ip_wait_retries: 30
 # Delay in seconds between retries when waiting for IP address assignment (default: 2 seconds)
 external_ip_wait_delay: 2
 
+# VM ready state wait configuration
+# Number of retries when waiting for VM ready state (default: 36 retries = 180 seconds with 5s delay)
+vm_wait_retries: 36
+# Delay in seconds between retries when waiting for VM ready state (default: 5 seconds)
+vm_wait_delay: 5
+
 # Resource lists (empty by default, should be defined in playbook)
 networks: []
 subnets: []
